@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LiveAvatar — Moshi + Bridge + Ditto</title>
+  <meta name="description" content="Real-time conversational AI talking head powered by Moshi speech AI and Ditto face animation." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg0:       #080c14;
+      --bg1:       #0d1422;
+      --bg2:       #111d31;
+      --surface:   rgba(255,255,255,0.045);
+      --surface-h: rgba(255,255,255,0.08);
+      --border:    rgba(255,255,255,0.08);
+      --accent:    #4f8ef7;
+      --accent2:   #8b5cf6;
+      --accent3:   #06b6d4;
+      --danger:    #ef4444;
+      --success:   #22c55e;
+      --warning:   #f59e0b;
+      --text:      #e2e8f0;
+      --text-dim:  #64748b;
+      --text-muted:#334155;
+      --glow-a:    rgba(79,142,247,0.22);
+      --glow-v:    rgba(139,92,246,0.22);
+      --radius:    16px;
+      --radius-sm: 10px;
+      --tr:        0.2s cubic-bezier(.4,0,.2,1);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg0);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      overflow: hidden;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      grid-template-rows: 56px 1fr;
+      height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    .header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px;
+      background: var(--bg1);
+      border-bottom: 1px solid var(--border);
+      z-index: 10;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: -.02em;
+    }
+    .logo-icon {
+      width: 30px; height: 30px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: grid; place-items: center;
+      font-size: 16px;
+    }
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-dim);
+      transition: var(--tr);
+    }
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: var(--tr);
+      flex-shrink: 0;
+    }
+    .status-pill.connected .status-dot  { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .status-pill.connected              { color: var(--success); border-color: rgba(34,197,94,.3); }
+    .status-pill.connecting .status-dot { background: var(--warning); animation: blink 1s infinite; }
+    .status-pill.connecting             { color: var(--warning); }
+    .status-pill.error .status-dot      { background: var(--danger); }
+    .status-pill.error                  { color: var(--danger); }
+
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+    /* ── Sidebar ────────────────────────────────────────────── */
+    .sidebar {
+      background: var(--bg1);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 16px 14px;
+      gap: 0;
+    }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--text-muted);
+      margin: 10px 0 7px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-bottom: 10px;
+      transition: var(--tr);
+    }
+    .card:hover { background: var(--surface-h); }
+
+    /* ── Upload zone ─────────────────────────────────────────── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 20px 14px;
+      text-align: center;
+      cursor: pointer;
+      transition: var(--tr);
+      margin-bottom: 10px;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(79,142,247,.05);
+    }
+    .upload-zone input { display:none; }
+    .upload-zone img#portrait-preview {
+      width: 100%; max-height: 200px;
+      object-fit: cover;
+      border-radius: calc(var(--radius) - 4px);
+      display: none;
+    }
+    .upload-icon { font-size: 28px; margin-bottom: 6px; }
+    .upload-hint { font-size: 11px; color: var(--text-dim); }
+
+    /* ── Buttons ─────────────────────────────────────────────── */
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: var(--radius);
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: var(--tr);
+      position: relative;
+      overflow: hidden;
+    }
+    .btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,.08);
+      opacity: 0;
+      transition: var(--tr);
+    }
+    .btn:hover::before { opacity: 1; }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+    .btn-connect {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: #fff;
+      box-shadow: 0 4px 18px rgba(34,197,94,.3);
+      margin-bottom: 8px;
+    }
+    .btn-connect.disconnecting {
+      background: linear-gradient(135deg, var(--danger), #b91c1c);
+      box-shadow: 0 4px 18px rgba(239,68,68,.3);
+    }
+    .btn-mic {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+      box-shadow: 0 4px 18px var(--glow-a);
+    }
+    .btn-mic.recording {
+      background: linear-gradient(135deg, var(--danger), #b91c1c);
+      box-shadow: 0 4px 22px rgba(239,68,68,.45);
+      animation: rec-glow 2s ease-in-out infinite;
+    }
+    @keyframes rec-glow {
+      0%,100%{box-shadow:0 4px 22px rgba(239,68,68,.45)}
+      50%{box-shadow:0 4px 34px rgba(239,68,68,.7)}
+    }
+    .btn-mic .mic-icon { transition: transform .2s; }
+    .btn-mic.recording .mic-icon { animation: mic-pulse .7s ease-in-out infinite; }
+    @keyframes mic-pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.25)} }
+
+    /* ── Volume meter ────────────────────────────────────────── */
+    .vol-meter {
+      height: 3px;
+      border-radius: 2px;
+      background: var(--bg2);
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .vol-bar {
+      height: 100%;
+      width: 0%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--accent3), var(--accent));
+      transition: width .07s linear;
+    }
+
+    /* ── Transcript ──────────────────────────────────────────── */
+    .transcript-box {
+      height: 100px;
+      overflow-y: auto;
+      background: var(--bg0);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-dim);
+      line-height: 1.7;
+      scroll-behavior: smooth;
+    }
+    .word-new { display:inline; color:var(--accent3); animation: win .4s ease forwards; }
+    @keyframes win { from{opacity:0;transform:translateY(3px)} to{opacity:1;transform:none} }
+
+    /* ── Metrics ─────────────────────────────────────────────── */
+    .metrics { display: grid; grid-template-columns:1fr 1fr; gap:6px; }
+    .metric-card {
+      background: var(--bg0);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      text-align: center;
+    }
+    .metric-val {
+      font-size: 18px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--accent);
+    }
+    .metric-lbl { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+
+    /* ── Divider ─────────────────────────────────────────────── */
+    .divider { height: 1px; background: var(--border); margin: 4px -14px; opacity:.5; }
+
+    /* ── Sync / A/V offset ───────────────────────────────────── */
+    .sync-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .sync-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      flex-shrink: 0;
+      transition: background .3s;
+    }
+    .sync-dot.synced  { background: var(--success); }
+    .sync-dot.drifting{ background: var(--warning); }
+
+    /* slider */
+    input[type=range].av-slider {
+      width: 100%;
+      accent-color: var(--accent2);
+      margin: 6px 0 2px;
+    }
+
+    /* ── Main area ───────────────────────────────────────────── */
+    .main {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg0);
+      overflow: hidden;
+    }
+    .main::before {
+      content: '';
+      position: absolute;
+      width: 500px; height: 500px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--glow-v) 0%, transparent 70%);
+      top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+      pointer-events: none;
+    }
+
+    .video-wrap {
+      position: relative;
+      width: min(640px, calc(100vw - 340px));
+      aspect-ratio: 4/3;
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: 0 0 0 1px var(--border), 0 28px 70px rgba(0,0,0,.6);
+      background: var(--bg2);
+      z-index: 1;
+    }
+    #video-canvas { width:100%; height:100%; display:block; }
+
+    .idle-overlay {
+      position: absolute; inset: 0;
+      background: var(--bg2);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 10px;
+      color: var(--text-dim);
+      font-size: 13px;
+      transition: opacity .5s;
+    }
+    .idle-overlay.hidden { opacity:0; pointer-events:none; }
+    .idle-avatar { font-size: 64px; }
+
+    .live-badge {
+      position: absolute;
+      top: 12px; right: 12px;
+      display: flex; align-items: center; gap: 5px;
+      padding: 4px 9px;
+      border-radius: 20px;
+      background: rgba(239,68,68,.88);
+      font-size: 10px; font-weight: 700; color: #fff;
+      letter-spacing: .08em;
+      opacity: 0; pointer-events: none;
+      transition: opacity .3s;
+    }
+    .live-badge.visible { opacity:1; }
+    .live-dot { width:5px; height:5px; border-radius:50%; background:#fff; animation:blink 1s infinite; }
+
+    .fps-badge {
+      position: absolute;
+      bottom: 12px; right: 12px;
+      padding: 3px 8px;
+      border-radius: 7px;
+      background: rgba(0,0,0,.5);
+      font-size: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-dim);
+    }
+
+    /* ── Audio indicator ─────────────────────────────────────── */
+    .audio-indicator {
+      position: absolute;
+      bottom: 12px; left: 12px;
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(0,0,0,.55);
+      font-size: 11px; color: var(--text-dim);
+      opacity: 0; transition: opacity .3s;
+    }
+    .audio-indicator.visible { opacity:1; }
+    .audio-wave-mini { display:flex; align-items:center; gap:1px; height:12px; }
+    .audio-wave-mini span {
+      display:block; width:2px;
+      background: var(--accent3);
+      border-radius:1px;
+      animation: wave 0.8s ease-in-out infinite;
+    }
+    .audio-wave-mini span:nth-child(2) { animation-delay:.13s; }
+    .audio-wave-mini span:nth-child(3) { animation-delay:.26s; }
+    @keyframes wave {
+      0%,100%{ height:3px } 50%{ height:11px }
+    }
+
+    /* ── Toast ───────────────────────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: 20px; left: 50%;
+      transform: translateX(-50%) translateY(70px);
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 11px 18px;
+      font-size: 13px;
+      color: var(--text);
+      box-shadow: 0 8px 28px rgba(0,0,0,.5);
+      z-index: 999;
+      transition: transform .33s cubic-bezier(.34,1.56,.64,1), opacity .33s;
+      opacity: 0; pointer-events: none;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity:1; }
+    .toast.error   { border-color: rgba(239,68,68,.4); color:var(--danger); }
+    .toast.success { border-color: rgba(34,197,94,.4); color:var(--success); }
+
+    ::-webkit-scrollbar { width:3px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+  </style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="logo">
+      <div class="logo-icon">🎙️</div>
+      <span>LiveAvatar</span>
+      <span style="color:var(--text-muted);font-weight:400;font-size:12px;margin-left:4px;">Moshi · Bridge · Ditto</span>
+    </div>
+    <div class="status-pill" id="status-pill">
+      <div class="status-dot"></div>
+      <span id="status-text">Upload a portrait to begin</span>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+
+    <p class="section-label">Portrait Image</p>
+    <div class="upload-zone" id="upload-zone">
+      <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp" />
+      <div id="upload-placeholder">
+        <div class="upload-icon">🖼️</div>
+        <p style="font-weight:500;margin-bottom:3px;">Drop your portrait here</p>
+        <p class="upload-hint">JPG · PNG · WebP — face photo</p>
+      </div>
+      <img id="portrait-preview" src="" alt="Portrait preview" />
+    </div>
+
+    <p class="section-label">Session</p>
+    <div class="card" style="padding:10px;">
+      <button class="btn btn-connect" id="btn-connect" disabled>
+        <span>🔗</span><span id="connect-label">Connect</span>
+      </button>
+    </div>
+
+    <p class="section-label">Microphone</p>
+    <div class="card" style="padding:10px;">
+      <button class="btn btn-mic" id="btn-mic" disabled>
+        <span class="mic-icon">🎙️</span><span id="mic-label">Start Speaking</span>
+      </button>
+      <div class="vol-meter"><div class="vol-bar" id="vol-bar"></div></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <p class="section-label">Transcript</p>
+    <div class="card" style="padding:10px;">
+      <div class="transcript-box" id="transcript"></div>
+      <button id="btn-clear"
+        style="margin-top:7px;width:100%;padding:5px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--text-dim);font-family:inherit;font-size:11px;cursor:pointer;">
+        Clear
+      </button>
+    </div>
+
+    <div class="divider"></div>
+
+    <p class="section-label">Stats</p>
+    <div class="metrics">
+      <div class="metric-card">
+        <div class="metric-val" id="stat-frames">0</div>
+        <div class="metric-lbl">Frames</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val" id="stat-fps" style="color:var(--accent2)">—</div>
+        <div class="metric-lbl">FPS</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val" id="stat-audio" style="color:var(--accent3)">0</div>
+        <div class="metric-lbl">Audio pkts</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val" id="stat-latency" style="color:var(--warning)">—</div>
+        <div class="metric-lbl">1st frame</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <p class="section-label">A/V Lip Sync</p>
+    <div class="card" style="padding:10px;">
+      <!-- Sync status row -->
+      <div class="sync-row" style="margin-top:0;margin-bottom:8px;">
+        <div class="sync-dot" id="sync-dot"></div>
+        <span id="sync-label">Waiting for audio…</span>
+      </div>
+      <!-- Audio delay offset slider -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
+        <span style="font-size:10px;color:var(--text-dim);">Audio offset (ms)</span>
+        <span id="av-offset-val" style="font-size:10px;font-weight:600;color:var(--accent2);">0 ms</span>
+      </div>
+      <input type="range" id="av-offset-slider" class="av-slider"
+             min="-500" max="500" value="0" step="25" />
+      <p style="font-size:9px;color:var(--text-muted);margin-top:3px;line-height:1.4;">
+        ◀ — delays video &nbsp;|&nbsp; + delays audio ▶<br>
+        Adjust if lips don't match voice.
+      </p>
+    </div>
+
+  </aside>
+
+  <!-- Main video area -->
+  <main class="main">
+    <div class="video-wrap" id="video-wrap">
+      <div class="idle-overlay" id="idle-overlay">
+        <div class="idle-avatar">🧑</div>
+        <p>Upload a portrait &amp; connect to start</p>
+        <p style="font-size:11px;color:var(--text-muted)">Powered by Moshi · Bridge · Ditto</p>
+      </div>
+
+      <canvas id="video-canvas" width="640" height="480"></canvas>
+
+      <div class="live-badge" id="live-badge">
+        <div class="live-dot"></div>LIVE
+      </div>
+
+      <div class="audio-indicator" id="audio-indicator">
+        <div class="audio-wave-mini">
+          <span style="height:3px"></span>
+          <span style="height:7px"></span>
+          <span style="height:3px"></span>
+        </div>
+        <span>Audio</span>
+      </div>
+
+      <div class="fps-badge" id="fps-badge">0 fps</div>
+    </div>
+  </main>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════════
+   LiveAvatar — Adaptive A/V Sync Engine
+   ═══════════════════════════════════════════════════════════════════
+
+   HOW SYNC WORKS
+   ─────────────
+   The key problem: Moshi audio PCM arrives at the browser nearly
+   instantly (direct PCM output), while the corresponding video frames
+   arrive 200–500 ms later (they must pass through Bridge + Ditto GPU).
+
+   Root cause of the old bug: the active code in the previous version
+   played audio IMMEDIATELY on arrival — so audio was always 200–500 ms
+   AHEAD of the video. The correct seq-based sync code existed but was
+   placed AFTER </html> and was therefore dead code (never executed).
+
+   FIX: Adaptive pre-roll latch
+   ────────────────────────────
+   1. Audio packets arrive → buffered in _pendingAudio (NOT played yet).
+   2. First video frame arrives → latch releases:
+        _audioBaseTime = audioCtx.currentTime + LOOKAHEAD_S
+      All buffered audio is scheduled via AudioBufferSourceNode at:
+        startTime = _audioBaseTime + seq * CHUNK_DURATION_S + _avOffsetS
+      Video frames are added to videoFrameMap and drawn immediately.
+   3. Both audio and video are released at the same wall-clock moment →
+      perfect lip sync.
+
+   AUDIO OFFSET SLIDER
+   ───────────────────
+   Fine-tuning slider (–500 ms to +500 ms):
+     Positive → shifts audio LATER (video appears to lead, use if lips
+                                     move before sound)
+     Negative → shifts audio EARLIER (use if sound leads lips)
+   Changes take effect immediately; existing scheduled chunks are not
+   altered (smooth transition over next chunk boundary, ~80 ms).
+   ═══════════════════════════════════════════════════════════════════ */
+
+// ── Constants ────────────────────────────────────────────────────────
+const SAMPLE_RATE      = 24000;
+const SAMPLES_PER_CHUNK = 1920;                        // 80 ms @ 24 kHz
+const CHUNK_DURATION_S  = SAMPLES_PER_CHUNK / SAMPLE_RATE; // 0.08 s
+const LOOKAHEAD_S       = 0.02;   // schedule 20 ms in future on latch release
+const MAX_VIDEO_BUFFER  = 80;     // max frames in videoFrameMap before drop
+const MAX_AUDIO_BUFFER  = 200;    // max audio chunks buffered before vdo arrives
+const MAX_FRAME_WAIT_S  = 2.0;    // draw frame anyway if stuck this long
+
+// ── Session state ─────────────────────────────────────────────────────
+let ws = null, sessionId = null;
+let mediaRecorder = null;
+let audioCtx = null, analyserNode = null, volRafId = null;
+let isConnected = false, isRecording = false;
+let connectStartMs = 0, firstFrameMs = null;
+
+// ── A/V Sync state ────────────────────────────────────────────────────
+let _audioBaseTime  = null;   // AudioContext time when seq=0 plays (set on latch release)
+let _syncEstablished = false; // true after first video frame releases the latch
+let _pendingAudio   = [];     // [{seq, float32}] — waiting for latch
+let _avOffsetS      = 0.0;   // manual fine-tune offset in seconds (from slider)
+
+// ── Video buffer ──────────────────────────────────────────────────────
+// seq → { bmp: ImageBitmap, addedAt: AudioContext time }
+const videoFrameMap = new Map();
+let   _currentBmp   = null;  // currently displayed frame (held until next arrives)
+
+// ── Stats ─────────────────────────────────────────────────────────────
+let framesReceived = 0, audioPackets = 0;
+let fpsCount = 0, fpsDrawn = 0, fpsLast = performance.now();
+let renderRafId = null;
+let _syncOffsetTotal = 0, _syncOffsetN = 0; // for average sync offset display
+
+// ── DOM ───────────────────────────────────────────────────────────────
+const canvas       = document.getElementById('video-canvas');
+const ctx2d        = canvas.getContext('2d');
+const $status      = document.getElementById('status-pill');
+const $statusTxt   = document.getElementById('status-text');
+const $btnConnect  = document.getElementById('btn-connect');
+const $btnMic      = document.getElementById('btn-mic');
+const $connectLbl  = document.getElementById('connect-label');
+const $micLbl      = document.getElementById('mic-label');
+const $volBar      = document.getElementById('vol-bar');
+const $transcript  = document.getElementById('transcript');
+const $idleOverlay = document.getElementById('idle-overlay');
+const $liveBadge   = document.getElementById('live-badge');
+const $audioBadge  = document.getElementById('audio-indicator');
+const $fpsBadge    = document.getElementById('fps-badge');
+const $toast       = document.getElementById('toast');
+const $uploadZone  = document.getElementById('upload-zone');
+const $fileInput   = document.getElementById('file-input');
+const $preview     = document.getElementById('portrait-preview');
+const $placeholder = document.getElementById('upload-placeholder');
+const $statFrames  = document.getElementById('stat-frames');
+const $statFps     = document.getElementById('stat-fps');
+const $statAudio   = document.getElementById('stat-audio');
+const $statLatency = document.getElementById('stat-latency');
+const $syncDot     = document.getElementById('sync-dot');
+const $syncLabel   = document.getElementById('sync-label');
+const $avSlider    = document.getElementById('av-offset-slider');
+const $avSliderVal = document.getElementById('av-offset-val');
+
+// ── A/V Offset slider ─────────────────────────────────────────────────
+$avSlider.addEventListener('input', () => {
+  const ms = parseInt($avSlider.value, 10);
+  _avOffsetS = ms / 1000;
+  $avSliderVal.textContent = (ms >= 0 ? '+' : '') + ms + ' ms';
+});
+
+// ── Toast ─────────────────────────────────────────────────────────────
+let _toastT;
+function toast(msg, type = '') {
+  $toast.textContent = msg;
+  $toast.className = 'toast show ' + type;
+  clearTimeout(_toastT);
+  _toastT = setTimeout(() => { $toast.className = 'toast'; }, 3500);
+}
+
+// ── Status ────────────────────────────────────────────────────────────
+function setStatus(label, cls = '') {
+  $statusTxt.textContent = label;
+  $status.className = 'status-pill ' + cls;
+}
+
+// ── Upload ────────────────────────────────────────────────────────────
+$uploadZone.addEventListener('click', () => $fileInput.click());
+$uploadZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  $uploadZone.classList.add('drag-over');
+});
+$uploadZone.addEventListener('dragleave', () => $uploadZone.classList.remove('drag-over'));
+$uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  $uploadZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) doUpload(e.dataTransfer.files[0]);
+});
+$fileInput.addEventListener('change', () => {
+  if ($fileInput.files[0]) doUpload($fileInput.files[0]);
+});
+
+async function doUpload(file) {
+  $preview.src = URL.createObjectURL(file);
+  $preview.style.display = 'block';
+  $placeholder.style.display = 'none';
+  setStatus('Uploading…', 'connecting');
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/upload_image', { method: 'POST', body: form });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    sessionId = data.session_id;
+    toast(`Portrait ready (session ${sessionId})`, 'success');
+    setStatus('Image ready — click Connect', '');
+    $btnConnect.disabled = false;
+  } catch (e) {
+    toast('Upload failed: ' + e.message, 'error');
+    setStatus('Upload error', 'error');
+  }
+}
+
+// ── Audio init ────────────────────────────────────────────────────────
+// Uses AudioBufferSourceNode (not AudioWorklet) for sample-accurate scheduling.
+async function initAudio() {
+  if (audioCtx) {
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+    return;
+  }
+  // latencyHint:'interactive' → smallest possible output buffer
+  audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive' });
+  await audioCtx.resume();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   A/V SYNC CORE
+   ═══════════════════════════════════════════════════════════ */
+
+/**
+ * Schedule one audio chunk at its correct AudioContext time.
+ *
+ * seq  : Moshi LM step counter (0, 1, 2, …)
+ * float32 : raw PCM samples (1920 floats = 80 ms)
+ *
+ * Returns true if scheduled, false if too late to play.
+ */
+function _scheduleChunk(seq, float32) {
+  if (!audioCtx || _audioBaseTime === null) return false;
+
+  const startTime = _audioBaseTime + seq * CHUNK_DURATION_S + _avOffsetS;
+  const now       = audioCtx.currentTime;
+
+  // If chunk's scheduled time is more than 150 ms in the past → too late, drop
+  if (startTime < now - 0.15) return false;
+
+  const buf = audioCtx.createBuffer(1, float32.length, SAMPLE_RATE);
+  buf.copyToChannel(float32, 0);
+
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(audioCtx.destination);
+  // Clamp: never schedule in the past (minimum 2 ms lookahead)
+  src.start(Math.max(startTime, now + 0.002));
+
+  return true;
+}
+
+/**
+ * Called on every 0x01 audio packet.
+ * Buffers audio until the first video frame releases the latch.
+ */
+function handleAudio(seq, float32) {
+  audioPackets++;
+  $statAudio.textContent = audioPackets;
+
+  // Show audio badge momentarily
+  $audioBadge.classList.add('visible');
+  clearTimeout(handleAudio._hide);
+  handleAudio._hide = setTimeout(() => $audioBadge.classList.remove('visible'), 1000);
+
+  if (!_syncEstablished) {
+    // PRE-ROLL PHASE: buffer until first video unlocks sync
+    if (_pendingAudio.length >= MAX_AUDIO_BUFFER) {
+      _pendingAudio.shift(); // drop oldest to prevent memory growth
+    }
+    _pendingAudio.push({ seq, float32 });
+  } else {
+    // SYNC ACTIVE: schedule directly
+    _scheduleChunk(seq, float32);
+  }
+}
+
+/**
+ * Called when the first video frame arrives.
+ * Releases latched audio — from this point, audio and video are in sync.
+ */
+function _releaseLatch() {
+  if (_syncEstablished) return;
+  _syncEstablished = true;
+
+  // Set base time: seq=0 audio will play LOOKAHEAD_S from now
+  _audioBaseTime = audioCtx.currentTime + LOOKAHEAD_S;
+
+  // Flush all buffered audio chunks
+  let scheduled = 0, dropped = 0;
+  for (const { seq, float32 } of _pendingAudio) {
+    if (_scheduleChunk(seq, float32)) scheduled++;
+    else dropped++;
+  }
+  _pendingAudio = [];
+
+  console.log(`[A/V Sync] Latch released. Scheduled ${scheduled} chunks, dropped ${dropped} (too old).`);
+  $syncDot.className = 'sync-dot synced';
+  $syncLabel.textContent = 'A/V sync locked ✓';
+}
+
+/**
+ * Called on every 0x02 video packet.
+ * Adds decoded frame to videoFrameMap; triggers latch on first arrival.
+ */
+function handleVideo(seq, jpegAB) {
+  framesReceived++;
+  $statFrames.textContent = framesReceived;
+
+  // Release audio latch on very first frame
+  if (!_syncEstablished) _releaseLatch();
+
+  // Record when this frame was received (AudioContext time) for MAX_FRAME_WAIT fallback
+  const addedAt = audioCtx ? audioCtx.currentTime : 0;
+
+  // Evict oldest if buffer is too large
+  if (videoFrameMap.size >= MAX_VIDEO_BUFFER) {
+    const oldestSeq = Math.min(...videoFrameMap.keys());
+    const old = videoFrameMap.get(oldestSeq);
+    if (old && old.bmp) old.bmp.close();
+    videoFrameMap.delete(oldestSeq);
+  }
+
+  // Decode JPEG asynchronously (off main thread via browser)
+  createImageBitmap(new Blob([jpegAB], { type: 'image/jpeg' }))
+    .then(bmp => {
+      if (!isConnected) { bmp.close(); return; }
+      videoFrameMap.set(seq, { bmp, addedAt });
+    })
+    .catch(() => {});
+
+  // First frame → show UI
+  if (!firstFrameMs) {
+    firstFrameMs = performance.now() - connectStartMs;
+    $statLatency.textContent = Math.round(firstFrameMs) + 'ms';
+    $idleOverlay.classList.add('hidden');
+    $liveBadge.classList.add('visible');
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RENDER LOOP
+   ═══════════════════════════════════════════════════════════
+   Runs at monitor refresh rate (60 fps).  One video frame is
+   dequeued and promoted to _currentBmp per rAF tick when ready.
+   _currentBmp is always drawn (holds the last frame between
+   new arrivals — gives smooth playback at the server's fps).
+
+   Seq-based timing:
+     A video frame with seq=N is "ready" when:
+       audioCtx.currentTime >= _audioBaseTime + N * CHUNK_DURATION_S
+     i.e. when the audio for that segment is actually playing.
+
+   For frames whose seq doesn't have an exact audio counterpart
+   (e.g. seq=5 but audio only sent seq=0,2,4,6…), the formula
+   still gives a correct display window because CHUNK_DURATION_S
+   is uniform — all seqs map linearly to audio time.
+   ═══════════════════════════════════════════════════════════ */
+
+function startRenderLoop() {
+  fpsLast = performance.now();
+  fpsCount = 0;
+
+  function tick(nowMs) {
+    renderRafId = requestAnimationFrame(tick);
+
+    // ── Check if a new frame is ready ──────────────────────────
+    if (videoFrameMap.size > 0 && audioCtx) {
+      const nowAudio = audioCtx.currentTime;
+
+      // Collect all seq numbers whose display time has arrived
+      const readySeqs = [];
+      for (const [seq, { addedAt }] of videoFrameMap) {
+        let ready = false;
+
+        if (_audioBaseTime !== null) {
+          // Normal case: display when audio clock reaches this frame's time
+          const displayTime = _audioBaseTime + seq * CHUNK_DURATION_S + _avOffsetS;
+          ready = nowAudio >= displayTime;
+
+          // Safety fallback: never hold a frame more than MAX_FRAME_WAIT_S
+          if (!ready && (nowAudio - addedAt) > MAX_FRAME_WAIT_S) {
+            ready = true;
+          }
+        } else {
+          // Latch not yet released (no video expected yet, but handle edge case)
+          if ((nowAudio - addedAt) > MAX_FRAME_WAIT_S) ready = true;
+        }
+
+        if (ready) readySeqs.push(seq);
+      }
+
+      if (readySeqs.length > 0) {
+        // Sort ascending; process all ready frames
+        readySeqs.sort((a, b) => a - b);
+
+        // Track sync quality
+        if (_audioBaseTime !== null) {
+          const latestReady   = readySeqs[readySeqs.length - 1];
+          const expectedAudio = _audioBaseTime + latestReady * CHUNK_DURATION_S;
+          const offsetMs      = (audioCtx.currentTime - expectedAudio) * 1000;
+          _syncOffsetTotal += offsetMs;
+          _syncOffsetN++;
+        }
+
+        for (let i = 0; i < readySeqs.length; i++) {
+          const seq  = readySeqs[i];
+          const entry = videoFrameMap.get(seq);
+          videoFrameMap.delete(seq);
+          if (!entry) continue;
+
+          if (i === readySeqs.length - 1) {
+            // Most recent ready frame → promote to current
+            if (_currentBmp) _currentBmp.close();
+            _currentBmp = entry.bmp;
+            fpsCount++;
+          } else {
+            // Older skipped frames → discard
+            entry.bmp.close();
+          }
+        }
+      }
+    }
+
+    // ── Always draw current frame (holds image between updates) ──
+    if (_currentBmp) {
+      ctx2d.drawImage(_currentBmp, 0, 0, canvas.width, canvas.height);
+    }
+
+    // ── FPS counter (once per second) ────────────────────────────
+    if (nowMs - fpsLast >= 1000) {
+      const elapsed = nowMs - fpsLast;
+      const fps     = Math.round(fpsCount * 1000 / elapsed);
+      $fpsBadge.textContent = fps + ' fps';
+      $statFps.textContent  = fps;
+
+      // Update sync label
+      const qd = videoFrameMap.size;
+      if (_syncEstablished) {
+        if (_syncOffsetN > 0) {
+          const avgMs = Math.round(_syncOffsetTotal / _syncOffsetN);
+          const absMs = Math.abs(avgMs);
+          if (absMs < 80) {
+            $syncDot.className = 'sync-dot synced';
+            $syncLabel.textContent = `${fps} fps · ±${absMs}ms sync ✓`;
+          } else if (absMs < 250) {
+            $syncDot.className = 'sync-dot drifting';
+            $syncLabel.textContent = `${fps} fps · offset ${avgMs > 0 ? '+' : ''}${avgMs}ms`;
+          } else {
+            $syncDot.className = 'sync-dot';
+            $syncLabel.textContent = `${fps} fps · drift ${avgMs}ms ⚠ adjust slider`;
+          }
+          _syncOffsetTotal = 0; _syncOffsetN = 0; // reset for next window
+        } else if (qd > 8) {
+          $syncDot.className = 'sync-dot drifting';
+          $syncLabel.textContent = `${fps} fps · ${qd} buffered ⚠`;
+        }
+      }
+
+      fpsCount = 0;
+      fpsLast  = nowMs;
+    }
+  }
+
+  renderRafId = requestAnimationFrame(tick);
+}
+
+/* ── Connect / Disconnect ────────────────────────────────────────────── */
+$btnConnect.addEventListener('click', () => {
+  if (isConnected) disconnect(); else connect();
+});
+
+async function connect() {
+  if (!sessionId) { toast('Upload a portrait first', 'error'); return; }
+  await initAudio();
+
+  // Reset all state for a fresh session
+  _audioBaseTime   = null;
+  _syncEstablished = false;
+  _pendingAudio    = [];
+  _syncOffsetTotal = 0;
+  _syncOffsetN     = 0;
+  videoFrameMap.forEach(e => e.bmp && e.bmp.close());
+  videoFrameMap.clear();
+  if (_currentBmp) { _currentBmp.close(); _currentBmp = null; }
+  framesReceived = 0; audioPackets = 0; firstFrameMs = null;
+  $statFrames.textContent  = '0';
+  $statAudio.textContent   = '0';
+  $statFps.textContent     = '—';
+  $statLatency.textContent = '—';
+  $syncDot.className = 'sync-dot';
+  $syncLabel.textContent = 'Waiting for audio…';
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/${sessionId}`);
+  ws.binaryType = 'arraybuffer';
+  setStatus('Connecting…', 'connecting');
+  connectStartMs = performance.now();
+
+  ws.onopen = () => {
+    isConnected = true;
+    setStatus('Connected', 'connected');
+    $connectLbl.textContent = 'Disconnect';
+    $btnConnect.classList.add('disconnecting');
+    $btnMic.disabled = false;
+    toast('Connected to server', 'success');
+    startRenderLoop();
+  };
+
+  ws.onmessage = (ev) => {
+    const buf  = ev.data;               // ArrayBuffer
+    const view = new Uint8Array(buf);
+    const kind = view[0];
+
+    if (kind === 0x00) {
+      // Handshake — server ready
+
+    } else if (kind === 0x01) {
+      // Audio:  0x01 | seq(4 BE) | float32_pcm…
+      if (buf.byteLength < 6) return;
+      const seq    = new DataView(buf).getUint32(1, false); // big-endian
+      const float32 = new Float32Array(buf.slice(5));
+      handleAudio(seq, float32);
+
+    } else if (kind === 0x02) {
+      // Video:  0x02 | seq(4 BE) | jpeg…
+      if (buf.byteLength < 6) return;
+      const seq = new DataView(buf).getUint32(1, false); // big-endian
+      handleVideo(seq, buf.slice(5));
+
+    } else if (kind === 0x03) {
+      // Text transcript
+      appendTranscript(new TextDecoder().decode(buf.slice(1)));
+
+    } else if (kind === 0xFE) {
+      // Server keepalive noop — ignore
+
+    } else if (kind === 0xFF) {
+      toast('Server: ' + new TextDecoder().decode(buf.slice(1)), 'error');
+      disconnect();
+    }
+  };
+
+  ws.onclose = () => onDisconnected();
+  ws.onerror = () => { toast('WebSocket error', 'error'); onDisconnected(); };
+}
+
+function disconnect() {
+  if (ws) { try { ws.close(); } catch (_) {} ws = null; }
+  stopRecording();
+  onDisconnected();
+}
+
+function onDisconnected() {
+  isConnected = false;
+  $btnMic.disabled = true;
+  $connectLbl.textContent = 'Connect';
+  $btnConnect.classList.remove('disconnecting');
+  setStatus('Disconnected', '');
+  $liveBadge.classList.remove('visible');
+  $audioBadge.classList.remove('visible');
+  cancelAnimationFrame(renderRafId);
+
+  // Release GPU memory
+  videoFrameMap.forEach(e => e.bmp && e.bmp.close());
+  videoFrameMap.clear();
+  if (_currentBmp) { _currentBmp.close(); _currentBmp = null; }
+
+  // Reset sync state
+  _audioBaseTime   = null;
+  _syncEstablished = false;
+  _pendingAudio    = [];
+
+  $syncDot.className = 'sync-dot';
+  $syncLabel.textContent = 'Waiting for audio…';
+}
+
+/* ── Microphone ──────────────────────────────────────────────────────── */
+$btnMic.addEventListener('click', () => {
+  if (isRecording) stopRecording(); else startRecording();
+});
+
+async function startRecording() {
+  if (!isConnected) { toast('Connect first', 'error'); return; }
+  if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    isRecording = true;
+    $btnMic.classList.add('recording');
+    $micLbl.textContent = 'Stop Speaking';
+
+    // Connect mic → analyser (for VU meter only — NOT to audioCtx.destination)
+    const inputSrc = audioCtx.createMediaStreamSource(stream);
+    analyserNode = audioCtx.createAnalyser();
+    analyserNode.fftSize = 256;
+    inputSrc.connect(analyserNode);
+    // NOT: analyserNode.connect(audioCtx.destination) — that would cause echo
+    animateVolume();
+
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : 'audio/ogg;codecs=opus';
+    mediaRecorder = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
+
+    mediaRecorder.ondataavailable = async (ev) => {
+      if (!ws || ws.readyState !== WebSocket.OPEN || ev.data.size === 0) return;
+      const ab  = await ev.data.arrayBuffer();
+      const msg = new Uint8Array(1 + ab.byteLength);
+      msg[0] = 0x01;   // audio kind
+      msg.set(new Uint8Array(ab), 1);
+      ws.send(msg.buffer);
+    };
+
+    mediaRecorder.start(80);   // 80 ms chunks ≈ one Moshi audio frame
+    toast('Microphone active — speak now!', 'success');
+  } catch (e) {
+    toast('Mic error: ' + e.message, 'error');
+    isRecording = false;
+    $btnMic.classList.remove('recording');
+    $micLbl.textContent = 'Start Speaking';
+  }
+}
+
+function stopRecording() {
+  isRecording = false;
+  $btnMic.classList.remove('recording');
+  $micLbl.textContent = 'Start Speaking';
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+    mediaRecorder.stream.getTracks().forEach(t => t.stop());
+  }
+  mediaRecorder = null;
+  cancelAnimationFrame(volRafId);
+  $volBar.style.width = '0%';
+  analyserNode = null;
+}
+
+function animateVolume() {
+  const data = new Uint8Array(analyserNode.frequencyBinCount);
+  const tick = () => {
+    if (!analyserNode) return;
+    analyserNode.getByteFrequencyData(data);
+    const avg = data.reduce((s, v) => s + v, 0) / data.length;
+    $volBar.style.width = Math.min(avg * 2.2, 100) + '%';
+    volRafId = requestAnimationFrame(tick);
+  };
+  tick();
+}
+
+/* ── Transcript ──────────────────────────────────────────────────────── */
+function appendTranscript(text) {
+  const s = document.createElement('span');
+  s.className = 'word-new';
+  s.textContent = text;
+  $transcript.appendChild(s);
+  $transcript.scrollTop = $transcript.scrollHeight;
+  setTimeout(() => s.classList.remove('word-new'), 500);
+}
+document.getElementById('btn-clear').addEventListener('click', () => {
+  $transcript.innerHTML = '';
+});
+</script>
+</body>
+</html>
